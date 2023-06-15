@@ -50,7 +50,9 @@ libdir:
 	@mkdir -p lib
 
 # C examples compilation
-examples: bin/img
+examples: bin/img \
+			bin/model \
+			bin/model-snapshot
 
 EXMAPLES_CFLAGS = $(CFLAGS) -Isrc
 EXAMPLES_LDFLAGS = -L$(PWD)/lib -Wl,-rpath,$(PWD)/lib -l$(LIBNAME)
