@@ -49,10 +49,34 @@ lib/$(LIB): lib/$(LIB_SHORTNAME)
 libdir:
 	@mkdir -p lib
 
+# Python package.
+PYTHON=  python3
+PACKAGE= wrapper.abi3.$(SOEXT)
+OBJS=    src/wrapper.o
+
+.PHONY: package
+package: mim/$(PACKAGE) \
+         mim/lib/$(LIB) \
+         mim/include/mim.h
+
+mim/$(PACKAGE): setup.py src/build-wrapper.py $(OBJS) lib/$(LIB)
+	$(PYTHON) setup.py build --build-lib .
+	@rm -rf build mim.egg-info
+
+src/%.o: src/%.c src/%.h
+	$(CC) $(LIB_CFLAGS) -c -o $@ $<
+
+mim/lib/$(LIB): lib/$(LIB)
+	@mkdir -p mim/lib
+	@ln -fs ../../$< $@
+
+mim/include/%.h: src/%.h
+	@mkdir -p mim/include
+	@ln -fs ../../$< $@
+
 # C examples compilation
 examples: bin/img \
-			bin/model \
-			bin/model-snapshot
+			bin/model
 
 EXMAPLES_CFLAGS = $(CFLAGS) -Isrc
 EXAMPLES_LDFLAGS = -L$(PWD)/lib -Wl,-rpath,$(PWD)/lib -l$(LIBNAME)
