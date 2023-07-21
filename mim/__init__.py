@@ -1,3 +1,3 @@
-from .core import Model
+from .core import Prng, Model
 
-__all__ = ["Model"]
+__all__ = ["Prng", "Model"]

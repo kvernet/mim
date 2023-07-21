@@ -78,3 +78,40 @@ class Model:
             ffi.from_buffer(parameter)
         )
         return parameter
+
+
+class Prng:
+    """Pseudo random number generator."""
+    
+    def __init__(self, seed=0):
+        
+        # Allocate the C object.
+        c_prng = ffi.new('struct mim_prng *[1]')
+        
+        if seed < 0:
+            seed = 0
+        
+        c_prng[0] = lib.mim_prng_init(seed)
+        
+        self._c = ffi.gc(
+            c_prng,
+            lambda x: x[0].destroy(x)
+        )
+    
+    @property
+    def seed(self):
+        return int(self._c[0].seed)
+    
+    @property
+    def weight(self):
+        return float(self._c[0].weight(self._c[0]))
+    
+    def uniform(self, low=0, up=1):
+        u = self._c[0].uniform1(self._c[0])
+        return low + u * (up - low)
+    
+    def normal(self, mu=0, sigma=1):
+        return self._c[0].normal(self._c[0], mu, sigma)
+    
+    def poisson(self, par):
+        return self._c[0].poisson(self._c[0], par)

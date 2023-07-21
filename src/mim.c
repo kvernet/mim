@@ -7,6 +7,7 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
+#include <float.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -375,4 +376,190 @@ enum mim_return mim_model_invert(
     }
     
     return MIM_SUCCESS;
+}
+
+/* ============================================================================
+ * Pseudo random number generator interface
+ * ============================================================================
+ */
+struct prng {
+    struct mim_prng pub;
+    
+    const double weight;    /* Monte Carlo weight */
+};
+
+static double uniform1(struct mim_prng *prng);
+static double normal(struct mim_prng *prng,
+        const double mu, const double sigma);
+static double poisson(struct mim_prng *prng,
+        const double lambda);
+static double weight(struct mim_prng *prng);
+
+static void set_seed(struct mim_prng *prng, const unsigned long s) {
+    *(unsigned long*)&prng->seed = s;
+    /* Set seed */
+    srand(prng->seed);
+}
+
+static void mim_prng_destroy(struct mim_prng **self_ptr) {
+    if(self_ptr == NULL || *self_ptr == NULL) return;
+    free(*self_ptr);
+    self_ptr = NULL;
+}
+
+struct mim_prng *mim_prng_init(const unsigned long seed) {
+    struct prng *prng = malloc(sizeof(*prng));
+    
+    if(seed > 0) {
+        *(unsigned long*)&prng->pub.seed = seed;
+    }
+    else {
+        FILE *stream = fopen("/dev/urandom", "rb");
+        if(stream == NULL) *(unsigned long*)&prng->pub.seed = time(NULL);
+        else {
+            unsigned int seeds[2];
+            fread(seeds, sizeof seeds, 1, stream);
+            *(unsigned long*)&prng->pub.seed = seeds[0];
+            fclose(stream);
+        }
+    }
+    
+    prng->pub.set_seed = &set_seed;
+    prng->pub.destroy = &mim_prng_destroy;
+    
+    prng->pub.uniform1 = &uniform1;
+    prng->pub.normal = &normal;
+    prng->pub.poisson = &poisson;
+    prng->pub.weight = &weight;    
+    
+    /* Default weight */
+    *(double*)&prng->weight = 1.;
+    
+    /* Set seed */
+    srand(prng->pub.seed);
+    
+    return &prng->pub;
+}
+
+
+
+static double uniform1(struct mim_prng *prng) {
+    struct prng *p = (void*)prng;
+    *(double*)&p->weight = 1;
+    return (double)rand() / (double)RAND_MAX;
+}
+
+double normal(struct mim_prng *prng,
+        const double mu, const double sigma) {
+    struct prng *p = (void*)prng;
+    
+    if(sigma == 0) {
+        *(double*)&p->weight = 1.;
+        return mu;
+	}
+	
+	const double u = uniform1(prng);
+	const double v = uniform1(prng);
+	
+	const double two_pi = 2 * M_PI;
+	const double mag = sqrt(-2 * log(u));
+	
+	double x = sigma * mag * cos(two_pi * v) + mu;
+	
+	// compute weight = inv(pdf)
+	const double xi = (x - mu) / sigma;
+	const double nume = exp(-0.5 * xi * xi);
+	const double deno = sigma * sqrt(two_pi);
+	*(double*)&p->weight = deno / nume;
+	
+	return x;
+}
+
+static double poisson_knuth(struct mim_prng *prng,
+        const double lambda);
+static double poisson_cook(struct mim_prng *prng,
+        const double lambda);
+double poisson(struct mim_prng *prng,
+        const double lambda) {
+    if(abs(lambda) >= DBL_MAX) return DBL_MAX;
+    else if(lambda < 30) return poisson_knuth(prng, lambda);
+    else return poisson_cook(prng, lambda);
+}
+
+static double weight(struct mim_prng *prng) {
+    struct prng *p = (void*)prng;
+    return p->weight;
+}
+
+long long compute_factorial_minus_one(long long k) {
+    long long fact = 1;
+    for(long long i = 2; i < k - 1; i++) {
+        fact *= i;
+    }
+    return fact;
+}
+
+double compute_poisson_weight(const double lambda,
+        const long long k, const double x) {
+    long long fact = compute_factorial_minus_one(k);
+    
+    const double pdf = exp(-lambda) * pow(lambda, x) / (double)fact;
+    return 1 / pdf;
+}
+
+// algorithm https://fr.wikipedia.org/wiki/Loi_de_Poisson
+double poisson_knuth(struct mim_prng *prng,
+        const double lambda) {
+    struct prng *rng = (void*)prng;
+    
+    double p = 1;
+    long long k = 0;
+    
+    while(p > exp(-lambda)) {
+        const double u = uniform1(prng);
+        if((u <= 0.) || (u >= 1.)) continue;
+        
+        p *= u;
+        k += 1;
+    }
+    
+    double x = (double) (k - 1);
+    
+    *(double*)&rng->weight = compute_poisson_weight(
+            lambda, k, x);
+    
+    return x;
+}
+// reference: https://www.johndcook.com/blog/2010/06/14/generating-poisson-random-values/
+double poisson_cook(struct mim_prng *prng,
+        const double lambda) {
+    struct prng *rng = (void*)prng;
+    
+    const double c = 0.767 - 3.36 / lambda;
+    const double beta = M_PI / sqrt(3.0 * lambda);
+    const double alpha = beta * lambda;
+    const double k = log(c) - lambda - log(beta);
+    
+    while(true) {
+        const double u = uniform1(prng);
+        const double x = (alpha - log((1.0 - u)/u)) / beta;
+        const long n = floor(x + 0.5);
+        if(n < 0) continue;
+        
+        const double v = uniform1(prng);
+        const double y = alpha - beta * x;
+        const double t = 1.0 + exp(y);
+        const double lhs = y + log(v / (t*t));
+        // lgamma c++ function https://en.cppreference.com/w/cpp/numeric/math/lgamma
+        // N.B log(n!) ~= lgamma(n + 1)
+        const double rhs = k + n*log(lambda) - lgamma(n + 1);
+        
+        if(lhs <= rhs) {
+            /* FIXME */
+            *(double*)&rng->weight = compute_poisson_weight(
+                    lambda, n + 1, n);
+            
+            return n;
+        }
+    }
 }

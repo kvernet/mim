@@ -1,0 +1,11 @@
+bin
+lib
+src/*.o
+
+mim/__pycache__
+mim/include
+mim/lib
+mim/version.py
+mim/*.so
+
+*.dat

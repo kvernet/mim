@@ -16,6 +16,7 @@ else
 	LIB   = lib$(LIBNAME).$(SOEXT)
 	LD    = $(CC) -shared
 	RPATH = '-Wl,-rpath,$$ORIGIN/../lib'
+	MLIB  = -lm
 endif
 
 # Version name
@@ -76,10 +77,11 @@ mim/include/%.h: src/%.h
 
 # C examples compilation
 examples: bin/img \
-			bin/model
+			bin/model \
+			bin/stat
 
 EXMAPLES_CFLAGS = $(CFLAGS) -Isrc
-EXAMPLES_LDFLAGS = -L$(PWD)/lib -Wl,-rpath,$(PWD)/lib -l$(LIBNAME)
+EXAMPLES_LDFLAGS = -L$(PWD)/lib -Wl,-rpath,$(PWD)/lib -l$(LIBNAME) $(MLIB)
 
 bin/%: examples/%.c src/$(LIBNAME).h | lib/$(LIB) bindir
 	$(CC) $(EXMAPLES_CFLAGS) -o $@ $< $(EXAMPLES_LDFLAGS)
@@ -93,5 +95,9 @@ bindir:
 .PHONY: clean
 
 clean:
-	rm -rf lib
 	rm -rf bin
+	rm -rf build
+	rm -rf lib
+	rm -f src/*.o
+	rm -rf mim/$(PACKAGE) mim/__pycache__ mim/version.py
+	rm -rf mim/include mim/lib
