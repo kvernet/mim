@@ -78,7 +78,8 @@ mim/include/%.h: src/%.h
 # C examples compilation
 examples: bin/img \
 			bin/model \
-			bin/stat
+			bin/stat \
+			bin/img-flat
 
 EXMAPLES_CFLAGS = $(CFLAGS) -Isrc
 EXAMPLES_LDFLAGS = -L$(PWD)/lib -Wl,-rpath,$(PWD)/lib -l$(LIBNAME) $(MLIB)

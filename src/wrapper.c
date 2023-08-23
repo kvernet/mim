@@ -128,3 +128,31 @@ enum mim_return mim_model_invert_w(
     
     return mim_model_invert(image, model, observation);
 }
+
+enum mim_return mim_model_min_invert_w(
+        const struct mim_model *model,
+        const size_t observation_properties[4],
+        void *observation_data,
+        const size_t parameter_properties[4],
+        void *parameter_data[3],
+        const double min_value) {
+    
+    struct wrapper obs_wrapper;
+    const struct mim_img *observation = wrapper_img(
+            &obs_wrapper, observation_properties,
+            observation_data
+    );
+    
+    struct wrapper parameter_wrapper[3];
+    struct mim_img *parameter_images[3];
+    for(int i = 0; i < 3; i++) {
+        parameter_images[i] = wrapper_img(
+                &parameter_wrapper[i], parameter_properties,
+                parameter_data[i]);
+    }
+    
+    return mim_model_min_invert(
+        parameter_images[0], parameter_images[1],
+        parameter_images[2], model,
+        observation, min_value);
+}

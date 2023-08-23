@@ -99,6 +99,18 @@ enum mim_return mim_model_invert(
         const struct mim_img *observation
 );
 
+/* Get parameter values for a given model and observation with
+ * a minimum value
+ */
+enum mim_return mim_model_min_invert(
+        struct mim_img *image,              /* parameter */
+        struct mim_img *bin_image,          /* bin size */
+        struct mim_img *value_image,        /* integrated value*/
+        const struct mim_model *model,      /* the observation */
+        const struct mim_img *observation,  /* the model */
+        const double min_value              /* min value */
+);
+
 /* ============================================================================
  * Pseudo random number generator interface
  * ============================================================================

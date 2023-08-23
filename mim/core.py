@@ -78,6 +78,30 @@ class Model:
             ffi.from_buffer(parameter)
         )
         return parameter
+    
+    def invert_min(self, observation, min_value):
+        """Get parameter, bin and integrated values for a 
+           given observation and a minimum value.
+        """
+        
+        # Sanity check
+        assert(observation.dtype == "f8")
+        assert(observation.shape == self.shape)
+        
+        parameter = numpy.empty(self.shape)
+        bins = numpy.empty(self.shape)
+        values = numpy.empty(self.shape)
+        
+        lib.mim_model_min_invert_w(
+            self._c[0],
+            (*observation.shape, *observation.strides),
+            ffi.from_buffer(observation),
+            (*parameter.shape, *parameter.strides),
+            (ffi.from_buffer(parameter), ffi.from_buffer(bins), ffi.from_buffer(values)),
+            min_value
+        )
+        
+        return parameter, bins, values
 
 
 class Prng:

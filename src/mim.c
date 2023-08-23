@@ -378,6 +378,153 @@ enum mim_return mim_model_invert(
     return MIM_SUCCESS;
 }
 
+/* Integrate bins to get the minimum value */
+enum mim_return mim_integrate_bins_for_min(
+        size_t *bins, double *value,
+        const size_t i, const size_t j,
+        const struct mim_img *observation,
+        const double min_value);
+
+/* Integrate bins */
+double integrate_bins(
+        const size_t i, const size_t j,
+        const size_t bins,
+        const struct mim_img *observation);
+
+/* Get parameter values for a given model and observation with
+ * a minimum value
+ */
+enum mim_return mim_model_min_invert(
+        struct mim_img *image,
+        struct mim_img *bin_image,
+        struct mim_img *value_image,
+        const struct mim_model *model,
+        const struct mim_img *observation,
+        const double min_value) {
+    
+    if(model == NULL || observation == NULL) return MIM_FAILURE;
+    const size_t width = observation->width;
+    const size_t height = observation->height;
+    const double *parameter = ((struct model*)model)->parameter;
+    const size_t size = ((struct model*)model)->depth;
+    /* Get the the model images */
+    struct mim_img *model_images[size];
+    
+    enum mim_return mrc;
+    
+    /* 1D images to invert a bin */
+    struct mim_img *tmp_image = mim_img_empty(1, 1);
+    struct mim_img *tmp_observation = mim_img_empty(1, 1);
+    struct mim_img *tmp_images[size];
+    for(size_t i = 0; i < size; i++) {
+        tmp_images[i] = mim_img_empty(1, 1);
+        model_images[i] = mim_img_empty(width, height);
+        mrc = mim_model_get(
+                model_images[i], model, parameter[i]);
+        if(mrc == MIM_FAILURE) return mrc;
+    }
+    
+    size_t iw, ih;
+    for(iw = 0; iw < width; iw++) {
+        for(ih = 0; ih < height; ih++) {
+            /* Integrate nearest bins to get the minimum value */
+            size_t bins;
+            double value;
+            mim_integrate_bins_for_min(&bins, &value,
+                    iw, ih, observation, min_value);
+            
+            if(bin_image != NULL) {
+                bin_image->set(bin_image, iw, ih, bins);
+            }
+            if(value_image != NULL) {
+                value_image->set(value_image, iw, ih, value);
+            }
+            
+            /* Invert the model for that bin */
+            if(image != NULL) {
+                tmp_observation->set(tmp_observation, 0, 0, value);
+                
+                for(size_t ip = 0; ip < size; ip++) {
+                    const double v = integrate_bins(
+                            iw, ih, bins, model_images[ip]);
+                    tmp_images[ip]->set(tmp_images[ip], 0, 0, v);
+                }
+                
+                struct mim_model *tmp_model = mim_model_create(
+                        size, parameter, tmp_images);
+                
+                mrc = mim_model_invert(
+                        tmp_image, tmp_model, tmp_observation);
+                if(mrc == MIM_FAILURE) {
+                    tmp_model->destroy(&tmp_model);
+                    return mrc;
+                }
+                
+                const double par = tmp_image->get(tmp_image, 0, 0);
+                image->set(image, iw, ih, par);
+                tmp_model->destroy(&tmp_model);
+            }
+        }
+    }
+    
+    tmp_image->destroy(&tmp_image);
+    tmp_observation->destroy(&tmp_observation);
+    for(size_t i = 0; i < size; i++) {
+        tmp_images[i]->destroy(&tmp_images[i]);
+        model_images[i]->destroy(&model_images[i]);
+    }    
+    
+    return MIM_SUCCESS;
+}
+
+enum mim_return mim_integrate_bins_for_min(
+        size_t *bins, double *value,
+        const size_t i, const size_t j,
+        const struct mim_img *image,
+        const double min_value) {
+    
+    double sum = image->get(image, i, j);
+    
+    long n = 1;
+    while(sum < min_value) {
+        for(long k = -n; k < n + 1; k++) {
+            long step = 0;
+            if(abs(k) == n) step = 1;
+            else step = 2*n;
+                        
+            for(long l = -n; l < n + 1; l+=step) {
+                if(i + k >= 0 && i + k < image->width &&
+                        j + l >= 0 && j + l < image->height) {
+                    sum += image->get(image, i + k, j + l);
+                }
+            }
+        }
+        n++;
+    }
+	
+	*bins  = 2 * n - 1;
+	*value = sum;    
+    
+    return MIM_SUCCESS;
+}
+
+double integrate_bins(
+        const size_t i, const size_t j,
+        const size_t bins,
+        const struct mim_img *image) {
+    double sum = 0.;
+    long n = (bins - 1) / 2;
+    for(long k = -n; k < n + 1; k++) {
+        for(long l = -n; l < n + 1; l++) {
+            if(i + k >= 0 && i + k < image->width &&
+                    j + l >= 0 && j + l < image->height) {
+                sum += image->get(image, i + k, j + l);
+            }
+        }
+    }
+    return sum;
+}
+
 /* ============================================================================
  * Pseudo random number generator interface
  * ============================================================================
