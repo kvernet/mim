@@ -347,31 +347,44 @@ enum mim_return mim_model_get(
 enum mim_return mim_model_invert(
         struct mim_img *image,
         const struct mim_model *pub,
-        const struct mim_img *observation) {
-    
-    if((observation->height != pub->height) ||
-            (observation->width != pub->width) ||
-            (image->height != pub->height) ||
-            (image->width != pub->width)) {
-        return MIM_FAILURE;
-    }
+        const struct mim_img *observation,
+        const struct mim_img *filter) {
     
     struct model *model = (void *)pub;
     const size_t width = pub->width;
     const size_t height = pub->height;
+    
+    if(image->width != width || image->height != height ||
+            observation->width != width || observation->height != height) {
+        return MIM_FAILURE;
+    }    
+    if(filter != NULL) {
+        if(filter->width != width || filter->height != height)
+            return MIM_FAILURE;
+    }
+    
     const size_t depth = model->depth;
     double *spline = model->spline;
     size_t i;
     for(i = 0; i < width; i++) {
         size_t j;
         for(j = 0; j < height; j++, spline += N_COEFS * depth) {
-            const double *count = spline;
-            const double *mb = count + 2 * depth;
-            const double value = spline_interpolate(
-                    depth, count, model->parameter,
-                    mb, observation->get(observation, i, j));
-            
-            image->set(image, i, j, value);
+            double fvalue = 1.0;
+            if(filter != NULL) {
+                fvalue = filter->get(filter, i, j);
+            }
+            if(fvalue > 0) {
+                const double *count = spline;
+                const double *mb = count + 2 * depth;
+                const double value = spline_interpolate(
+                        depth, count, model->parameter,
+                        mb, observation->get(observation, i, j));
+                
+                image->set(image, i, j, value);
+            }
+            else {
+                image->set(image, i, j, BIN_FILTER_VALUE);
+            }
         }
     }
     
@@ -379,17 +392,25 @@ enum mim_return mim_model_invert(
 }
 
 /* Integrate bins to get the minimum value */
-enum mim_return mim_integrate_bins_for_min(
+static enum mim_return mim_integrate_bins_for_min(
         size_t *bins, double *value,
         const size_t i, const size_t j,
         const struct mim_img *observation,
+        const struct mim_img *filter,
         const double min_value);
 
 /* Integrate bins */
-double integrate_bins(
+static double integrate_bins(
         const size_t i, const size_t j,
         const size_t bins,
-        const struct mim_img *observation);
+        const struct mim_img *image,
+        const struct mim_img *filter);
+
+static enum mim_return mim_compute_stats(
+        struct mim_img *image,
+        const struct mim_img *bin_image,
+        const struct mim_img *filter,
+        const double sigma);
 
 /* Get parameter values for a given model and observation with
  * a minimum value
@@ -400,11 +421,26 @@ enum mim_return mim_model_min_invert(
         struct mim_img *value_image,
         const struct mim_model *model,
         const struct mim_img *observation,
-        const double min_value) {
+        const struct mim_img *filter,
+        const double min_value,
+        const double sigma) {
     
     if(model == NULL || observation == NULL) return MIM_FAILURE;
     const size_t width = observation->width;
     const size_t height = observation->height;
+    
+    if(image->width != width || image->height != height ||
+            bin_image->width != width || bin_image->height != height ||
+            value_image->width != width || value_image->height != height ||
+            observation->width != width || observation->height != height) {
+        return MIM_FAILURE;
+    }    
+    if(filter != NULL) {
+        if(filter->width != width || filter->height != height)
+            return MIM_FAILURE;
+    }
+    
+    
     const double *parameter = ((struct model*)model)->parameter;
     const size_t size = ((struct model*)model)->depth;
     /* Get the the model images */
@@ -424,47 +460,73 @@ enum mim_return mim_model_min_invert(
         if(mrc == MIM_FAILURE) return mrc;
     }
     
-    size_t iw, ih;
-    for(iw = 0; iw < width; iw++) {
-        for(ih = 0; ih < height; ih++) {
-            /* Integrate nearest bins to get the minimum value */
-            size_t bins;
-            double value;
-            mim_integrate_bins_for_min(&bins, &value,
-                    iw, ih, observation, min_value);
-            
-            if(bin_image != NULL) {
-                bin_image->set(bin_image, iw, ih, bins);
-            }
-            if(value_image != NULL) {
-                value_image->set(value_image, iw, ih, value);
+    
+    size_t i, j;
+    for(i = 0; i < width; i++) {
+        for(j = 0; j < height; j++) {
+            double fvalue = 1.0;
+            if(filter != NULL) {
+                fvalue = filter->get(filter, i, j);
             }
             
-            /* Invert the model for that bin */
-            if(image != NULL) {
-                tmp_observation->set(tmp_observation, 0, 0, value);
+            if(fvalue > 0) {
+                size_t bins;
+                double value, par;
+                /* Integrate nearest bins to get the minimum value */                
+                mim_integrate_bins_for_min(&bins, &value,
+                        i, j, observation, filter, min_value);
                 
-                for(size_t ip = 0; ip < size; ip++) {
-                    const double v = integrate_bins(
-                            iw, ih, bins, model_images[ip]);
-                    tmp_images[ip]->set(tmp_images[ip], 0, 0, v);
+                if(bin_image != NULL) {
+                    bin_image->set(bin_image, i, j, bins);
+                }
+                if(value_image != NULL) {
+                    value_image->set(value_image, i, j, value);
                 }
                 
-                struct mim_model *tmp_model = mim_model_create(
-                        size, parameter, tmp_images);
-                
-                mrc = mim_model_invert(
-                        tmp_image, tmp_model, tmp_observation);
-                if(mrc == MIM_FAILURE) {
+                /* Invert the model for that bin */
+                if(image != NULL) {
+                    tmp_observation->set(tmp_observation, 0, 0, value);
+                    
+                    for(size_t ip = 0; ip < size; ip++) {
+                        const double v = integrate_bins(
+                                i, j, bins, model_images[ip], filter);
+                        tmp_images[ip]->set(tmp_images[ip], 0, 0, v);
+                    }
+                    
+                    struct mim_model *tmp_model = mim_model_create(
+                            size, parameter, tmp_images);
+                    
+                    mrc = mim_model_invert(
+                            tmp_image, tmp_model, tmp_observation, NULL);
+                    if(mrc == MIM_FAILURE) {
+                        tmp_model->destroy(&tmp_model);
+                        return mrc;
+                    }
+                    
+                    par = tmp_image->get(tmp_image, 0, 0);
+                    image->set(image, i, j, par);
                     tmp_model->destroy(&tmp_model);
-                    return mrc;
                 }
-                
-                const double par = tmp_image->get(tmp_image, 0, 0);
-                image->set(image, iw, ih, par);
-                tmp_model->destroy(&tmp_model);
+            }
+            else {
+                if(bin_image != NULL) {
+                    bin_image->set(bin_image, i, j, 0);
+                }
+                if(value_image != NULL) {
+                    value_image->set(value_image, i, j, BIN_FILTER_VALUE);
+                }
+                if(image != NULL) {
+                    image->set(image, i, j, BIN_FILTER_VALUE);
+                }
             }
         }
+    }
+    
+    /* Compute statistics */
+    if(image != NULL) {
+        mrc = mim_compute_stats(
+                image, bin_image, filter, sigma);
+        if(mrc == MIM_FAILURE) return MIM_FAILURE;
     }
     
     tmp_image->destroy(&tmp_image);
@@ -481,6 +543,7 @@ enum mim_return mim_integrate_bins_for_min(
         size_t *bins, double *value,
         const size_t i, const size_t j,
         const struct mim_img *image,
+        const struct mim_img *filter,
         const double min_value) {
     
     double sum = image->get(image, i, j);
@@ -495,7 +558,13 @@ enum mim_return mim_integrate_bins_for_min(
             for(long l = -n; l < n + 1; l+=step) {
                 if(i + k >= 0 && i + k < image->width &&
                         j + l >= 0 && j + l < image->height) {
-                    sum += image->get(image, i + k, j + l);
+                    double fvalue = 1.0;
+                    if(filter != NULL) {
+                        fvalue = filter->get(filter, i + k, j + l);
+                    }
+                    if(fvalue > 0) {
+                        sum += image->get(image, i + k, j + l);
+                    }
                 }
             }
         }
@@ -511,18 +580,106 @@ enum mim_return mim_integrate_bins_for_min(
 double integrate_bins(
         const size_t i, const size_t j,
         const size_t bins,
-        const struct mim_img *image) {
+        const struct mim_img *image,
+        const struct mim_img *filter) {
     double sum = 0.;
     long n = (bins - 1) / 2;
     for(long k = -n; k < n + 1; k++) {
         for(long l = -n; l < n + 1; l++) {
             if(i + k >= 0 && i + k < image->width &&
                     j + l >= 0 && j + l < image->height) {
-                sum += image->get(image, i + k, j + l);
+                double fvalue = 1.0;
+                if(filter != NULL) {
+                    fvalue = filter->get(filter, i + k, j + l);
+                }
+                if(fvalue > 0) {
+                    sum += image->get(image, i + k, j + l);
+                }
             }
         }
     }
     return sum;
+}
+
+enum mim_return mim_compute_stats(
+        struct mim_img *image,
+        const struct mim_img *bin_image,
+        const struct mim_img *filter,
+        const double sigma) {
+    const size_t width = image->width;
+    const size_t height = image->height;
+    
+    if(bin_image->width != width || bin_image->height != height) {
+        return MIM_FAILURE;
+    }
+    
+    struct mim_img *sum_image = mim_img_zeros(width, height);
+    struct mim_img *weight_image = mim_img_zeros(width, height);
+    
+    double fvalue;
+    size_t i, j;
+    for(i = 0; i < width; i++) {
+        for(j = 0; j < height; j++) {
+            fvalue = 1.0;
+            if(filter != NULL) {
+                fvalue = filter->get(filter, i, j);
+            }
+            if(fvalue < 0) continue;            
+            
+            const size_t i0 = i;
+            const size_t j0 = j;
+            const double par = image->get(image, i, j);
+            const size_t bins = (size_t)bin_image->get(bin_image, i, j);
+            long n = (bins - 1) / 2;
+            for(long k = -n; k < n + 1; k++) {
+                for(long l = -n; l < n + 1; l++) {
+                    if(i + k >= 0 && i + k < width &&
+                            j + l >= 0 && j + l < height) {
+                        double fvalue = 1.0;
+                        if(filter != NULL) {
+                            fvalue = filter->get(filter, i + k, j + l);
+                        }
+                        if(fvalue > 0) {
+                            const double t1 = (i + k - i0);
+                            const double t2 = (j + l - j0);
+                            const double d2 = t1*t1 + t2*t2;
+                            const double arg = d2 / sigma;
+                            const double w = exp(-0.5 * arg);
+                            
+                            double s = sum_image->get(sum_image, i + k, j + l);
+                            sum_image->set(sum_image, i + k, j + l, s + w*par);
+                            
+                            s = weight_image->get(weight_image, i + k, j + l);
+                            weight_image->set(weight_image, i + k, j + l, s + w);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    for(i = 0; i < width; i++) {
+        for(j = 0; j < height; j++) {
+            double fvalue = 1.0;
+            if(filter != NULL) {
+                fvalue = filter->get(filter, i, j);
+            }
+            if(fvalue > 0) {
+                const double w = weight_image->get(weight_image, i, j);
+                const double mean = sum_image->get(sum_image, i, j) / w;
+                image->set(image, i, j, mean);
+            }
+            else {
+                image->set(image, i, j, BIN_FILTER_VALUE);
+            }
+        }
+    }
+    
+    /* Free allocated memory */
+    sum_image->destroy(&sum_image);
+    weight_image->destroy(&weight_image);
+    
+    return MIM_SUCCESS;
 }
 
 /* ============================================================================

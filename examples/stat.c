@@ -46,8 +46,7 @@ int main(int argc, char **argv) {
     
     /* Observation */
     const double tparameter = 1.8;
-    struct mim_img *obs = NULL;
-    obs = mim_img_empty(width, height);
+    struct mim_img *obs = mim_img_empty(width, height);
     for(size_t iw = 0; iw < width; iw++) {
         for(size_t ih = 0; ih < height; ih++) {
             obs->set(obs, iw, ih, 
@@ -69,7 +68,7 @@ int main(int argc, char **argv) {
         
         // invert random observation
         enum mim_return mrc = mim_model_invert(
-                image, model, robs);
+                image, model, robs, NULL);
         
         if(mrc == MIM_SUCCESS) {
             const double par = image->get(image, 0, 0);

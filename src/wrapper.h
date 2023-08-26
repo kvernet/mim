@@ -19,6 +19,8 @@ enum mim_return mim_model_invert_w(
         const struct mim_model *model,
         const size_t observation_properties[4],
         void *observation_data,
+        const size_t filter_properties[4],
+        void *filter_data,
         const size_t parameter_properties[4],
         void *parameter_data
 );
@@ -27,7 +29,10 @@ enum mim_return mim_model_min_invert_w(
         const struct mim_model *model,
         const size_t observation_properties[4],
         void *observation_data,
+        const size_t filter_properties[4],
+        void *filter_data,
         const size_t parameter_properties[4],
         void *parameter_data[3],
-        const double min_value
+        const double min_value,
+        const double sigma
 );

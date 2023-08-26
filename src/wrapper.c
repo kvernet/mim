@@ -113,35 +113,54 @@ enum mim_return mim_model_invert_w(
         const struct mim_model *model,
         const size_t observation_properties[4],
         void *observation_data,
+        const size_t filter_properties[4],
+        void *filter_data,
         const size_t parameter_properties[4],
         void *parameter_data) {
     
-    struct wrapper obs_wrapper, img_wrapper;
+    struct wrapper obs_wrapper, filter_wrapper, img_wrapper;
     const struct mim_img *observation = wrapper_img(
             &obs_wrapper, observation_properties,
             observation_data
     );
+    struct mim_img *filter = NULL;
+    if(filter_data != NULL) {
+        filter = wrapper_img(
+                &filter_wrapper, filter_properties,
+                filter_data
+        );
+    }
     struct mim_img *image = wrapper_img(
             &img_wrapper, parameter_properties,
             parameter_data
     );
     
-    return mim_model_invert(image, model, observation);
+    return mim_model_invert(image, model, observation, filter);
 }
 
 enum mim_return mim_model_min_invert_w(
         const struct mim_model *model,
         const size_t observation_properties[4],
         void *observation_data,
+        const size_t filter_properties[4],
+        void *filter_data,
         const size_t parameter_properties[4],
         void *parameter_data[3],
-        const double min_value) {
+        const double min_value,
+        const double sigma) {
     
-    struct wrapper obs_wrapper;
+    struct wrapper obs_wrapper, filter_wrapper;
     const struct mim_img *observation = wrapper_img(
             &obs_wrapper, observation_properties,
             observation_data
     );
+    struct mim_img *filter = NULL;
+    if(filter_data != NULL) {
+        filter = wrapper_img(
+                &filter_wrapper, filter_properties,
+                filter_data
+        );
+    }
     
     struct wrapper parameter_wrapper[3];
     struct mim_img *parameter_images[3];
@@ -153,6 +172,7 @@ enum mim_return mim_model_min_invert_w(
     
     return mim_model_min_invert(
         parameter_images[0], parameter_images[1],
-        parameter_images[2], model,
-        observation, min_value);
+        parameter_images[2],
+        model, observation, filter,
+        min_value, sigma);
 }

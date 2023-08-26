@@ -13,6 +13,8 @@ extern "C" {
 #define MIM_VERSION_MINOR 1
 #define MIM_VERSION_PATCH 0
 
+#define BIN_FILTER_VALUE -1
+
 enum mim_return {
     MIM_SUCCESS = 0,
     MIM_FAILURE
@@ -96,7 +98,8 @@ enum mim_return mim_model_get(
 enum mim_return mim_model_invert(
         struct mim_img *image,
         const struct mim_model *model,
-        const struct mim_img *observation
+        const struct mim_img *observation,
+        const struct mim_img *filter
 );
 
 /* Get parameter values for a given model and observation with
@@ -106,9 +109,11 @@ enum mim_return mim_model_min_invert(
         struct mim_img *image,              /* parameter */
         struct mim_img *bin_image,          /* bin size */
         struct mim_img *value_image,        /* integrated value*/
-        const struct mim_model *model,      /* the observation */
-        const struct mim_img *observation,  /* the model */
-        const double min_value              /* min value */
+        const struct mim_model *model,      /* the model */
+        const struct mim_img *observation,  /* the observation */
+        const struct mim_img *filter,       /* the observation */
+        const double min_value,             /* min value */
+        const double sigma                  /* gaussian sigma for weights */
 );
 
 /* ============================================================================

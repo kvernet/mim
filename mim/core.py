@@ -62,24 +62,42 @@ class Model:
         )        
         return image
     
-    def invert(self, observation):
+    def invert(self, observation, filter_=None):
         """Get parameter values for a given observation."""
         
         assert(observation.dtype == "f8")
         assert(observation.shape == self.shape)
         
+        if filter_ is not None:
+            assert(filter_.dtype == "f8")
+            assert(filter_.shape == self.shape)
+        
         parameter = numpy.empty(self.shape)
         
-        lib.mim_model_invert_w(
-            self._c[0],
-            (*observation.shape, *observation.strides),
-            ffi.from_buffer(observation),
-            (*parameter.shape, *parameter.strides),
-            ffi.from_buffer(parameter)
-        )
+        if filter_ is None:
+            lib.mim_model_invert_w(
+                self._c[0],
+                (*observation.shape, *observation.strides),
+                ffi.from_buffer(observation),
+                (*observation.shape, *observation.strides),
+                ffi.NULL,
+                (*parameter.shape, *parameter.strides),
+                ffi.from_buffer(parameter)
+            )
+        else:
+            filter_ = filter_.copy(order='C')
+            lib.mim_model_invert_w(
+                self._c[0],
+                (*observation.shape, *observation.strides),
+                ffi.from_buffer(observation),
+                (*filter_.shape, *filter_.strides),
+                ffi.from_buffer(filter_),
+                (*parameter.shape, *parameter.strides),
+                ffi.from_buffer(parameter)
+            )
         return parameter
     
-    def invert_min(self, observation, min_value):
+    def invert_min(self, observation, min_value, filter_=None, sigma=1.0):
         """Get parameter, bin and integrated values for a 
            given observation and a minimum value.
         """
@@ -88,18 +106,37 @@ class Model:
         assert(observation.dtype == "f8")
         assert(observation.shape == self.shape)
         
+        if filter_ is not None:
+            assert(filter_.dtype == "f8")
+            assert(filter_.shape == self.shape)
+        
         parameter = numpy.empty(self.shape)
         bins = numpy.empty(self.shape)
         values = numpy.empty(self.shape)
         
-        lib.mim_model_min_invert_w(
-            self._c[0],
-            (*observation.shape, *observation.strides),
-            ffi.from_buffer(observation),
-            (*parameter.shape, *parameter.strides),
-            (ffi.from_buffer(parameter), ffi.from_buffer(bins), ffi.from_buffer(values)),
-            min_value
-        )
+        if filter_ is None:
+            lib.mim_model_min_invert_w(
+                self._c[0],
+                (*observation.shape, *observation.strides),
+                ffi.from_buffer(observation),            
+                (*observation.shape, *observation.strides),
+                ffi.NULL,            
+                (*parameter.shape, *parameter.strides),
+                (ffi.from_buffer(parameter), ffi.from_buffer(bins), ffi.from_buffer(values)),
+                min_value, sigma
+            )
+        else:
+            filter_ = filter_.copy(order='C')  
+            lib.mim_model_min_invert_w(
+                self._c[0],
+                (*observation.shape, *observation.strides),
+                ffi.from_buffer(observation),            
+                (*filter_.shape, *filter_.strides),
+                ffi.from_buffer(filter_),            
+                (*parameter.shape, *parameter.strides),
+                (ffi.from_buffer(parameter), ffi.from_buffer(bins), ffi.from_buffer(values)),
+                min_value, sigma
+            )
         
         return parameter, bins, values
 

@@ -59,7 +59,7 @@ int main(void) {
 	
 	
 	enum mim_return rc = mim_model_invert(
-			result, model, observation);
+			result, model, observation, NULL);
 	
 	if(rc == MIM_FAILURE) {
 		return 1;
