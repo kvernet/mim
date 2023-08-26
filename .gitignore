@@ -1,5 +1,7 @@
 bin
 lib
+scripts
+share
 src/*.o
 
 mim/__pycache__
@@ -9,3 +11,5 @@ mim/version.py
 mim/*.so
 
 *.dat
+*.eggs
+*.pkl.gz

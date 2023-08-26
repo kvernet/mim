@@ -1,5 +1,9 @@
-import numpy
 from .wrapper import ffi, lib
+
+import numpy
+from typing import NamedTuple
+import pickle
+import gzip
 
 
 class Model:
@@ -176,3 +180,16 @@ class Prng:
     
     def poisson(self, par):
         return self._c[0].poisson(self._c[0], par)
+
+
+class Data(NamedTuple):
+    data: numpy.ndarray
+    
+    def dump(self, path):
+       with gzip.open(path, "wb") as f:
+           pickle.dump(self, f)    
+    
+    @staticmethod
+    def load(path):
+        with gzip.open(path, "rb") as f:
+            return pickle.load(f)
