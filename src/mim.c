@@ -552,12 +552,12 @@ enum mim_return mim_integrate_bins_for_min(
     while(sum < min_value) {
         for(long k = -n; k < n + 1; k++) {
             long step = 0;
-            if(abs(k) == n) step = 1;
+            if(labs(k) == n) step = 1;
             else step = 2*n;
                         
             for(long l = -n; l < n + 1; l+=step) {
-                if(i + k >= 0 && i + k < image->width &&
-                        j + l >= 0 && j + l < image->height) {
+                if((long)i + k >= 0 && i + k < image->width &&
+                        (long)j + l >= 0 && j + l < image->height) {
                     double fvalue = 1.0;
                     if(filter != NULL) {
                         fvalue = filter->get(filter, i + k, j + l);
@@ -586,8 +586,8 @@ double integrate_bins(
     long n = (bins - 1) / 2;
     for(long k = -n; k < n + 1; k++) {
         for(long l = -n; l < n + 1; l++) {
-            if(i + k >= 0 && i + k < image->width &&
-                    j + l >= 0 && j + l < image->height) {
+            if((long)i + k >= 0 && i + k < image->width &&
+                    (long)j + l >= 0 && j + l < image->height) {
                 double fvalue = 1.0;
                 if(filter != NULL) {
                     fvalue = filter->get(filter, i + k, j + l);
@@ -633,8 +633,8 @@ enum mim_return mim_compute_stats(
             long n = (bins - 1) / 2;
             for(long k = -n; k < n + 1; k++) {
                 for(long l = -n; l < n + 1; l++) {
-                    if(i + k >= 0 && i + k < width &&
-                            j + l >= 0 && j + l < height) {
+                    if((long)i + k >= 0 && i + k < width &&
+                            (long)j + l >= 0 && j + l < height) {
                         double fvalue = 1.0;
                         if(filter != NULL) {
                             fvalue = filter->get(filter, i + k, j + l);
@@ -785,7 +785,7 @@ static double poisson_cook(struct mim_prng *prng,
         const double lambda);
 double poisson(struct mim_prng *prng,
         const double lambda) {
-    if(abs(lambda) >= DBL_MAX) return DBL_MAX;
+    if(fabs(lambda) >= DBL_MAX) return DBL_MAX;
     else if(lambda < 30) return poisson_knuth(prng, lambda);
     else return poisson_cook(prng, lambda);
 }
