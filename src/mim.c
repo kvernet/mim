@@ -452,7 +452,9 @@ enum mim_return mim_model_min_invert(
     struct mim_img *tmp_image = mim_img_empty(1, 1);
     struct mim_img *tmp_observation = mim_img_empty(1, 1);
     struct mim_img *tmp_images[size];
-    for(size_t i = 0; i < size; i++) {
+    
+    size_t i;
+    for(i = 0; i < size; i++) {
         tmp_images[i] = mim_img_empty(1, 1);
         model_images[i] = mim_img_empty(width, height);
         mrc = mim_model_get(
@@ -461,7 +463,7 @@ enum mim_return mim_model_min_invert(
     }
     
     
-    size_t i, j;
+    size_t j;
     for(i = 0; i < width; i++) {
         for(j = 0; j < height; j++) {
             double fvalue = 1.0;
@@ -487,7 +489,8 @@ enum mim_return mim_model_min_invert(
                 if(image != NULL) {
                     tmp_observation->set(tmp_observation, 0, 0, value);
                     
-                    for(size_t ip = 0; ip < size; ip++) {
+                    size_t ip;
+                    for(ip = 0; ip < size; ip++) {
                         const double v = integrate_bins(
                                 i, j, bins, model_images[ip], filter);
                         tmp_images[ip]->set(tmp_images[ip], 0, 0, v);
@@ -531,7 +534,7 @@ enum mim_return mim_model_min_invert(
     
     tmp_image->destroy(&tmp_image);
     tmp_observation->destroy(&tmp_observation);
-    for(size_t i = 0; i < size; i++) {
+    for(i = 0; i < size; i++) {
         tmp_images[i]->destroy(&tmp_images[i]);
         model_images[i]->destroy(&model_images[i]);
     }    
@@ -548,14 +551,14 @@ enum mim_return mim_integrate_bins_for_min(
     
     double sum = image->get(image, i, j);
     
-    long n = 1;
+    long n = 1, k;
     while(sum < min_value) {
-        for(long k = -n; k < n + 1; k++) {
+        for(k = -n; k < n + 1; k++) {
             long step = 0;
             if(labs(k) == n) step = 1;
             else step = 2*n;
-                        
-            for(long l = -n; l < n + 1; l+=step) {
+            long l;
+            for(l = -n; l < n + 1; l+=step) {
                 if((long)i + k >= 0 && i + k < image->width &&
                         (long)j + l >= 0 && j + l < image->height) {
                     double fvalue = 1.0;
@@ -584,8 +587,9 @@ double integrate_bins(
         const struct mim_img *filter) {
     double sum = 0.;
     long n = (bins - 1) / 2;
-    for(long k = -n; k < n + 1; k++) {
-        for(long l = -n; l < n + 1; l++) {
+    long k, l;
+    for(k = -n; k < n + 1; k++) {
+        for(l = -n; l < n + 1; l++) {
             if((long)i + k >= 0 && i + k < image->width &&
                     (long)j + l >= 0 && j + l < image->height) {
                 double fvalue = 1.0;
@@ -631,8 +635,9 @@ enum mim_return mim_compute_stats(
             const double par = image->get(image, i, j);
             const size_t bins = (size_t)bin_image->get(bin_image, i, j);
             long n = (bins - 1) / 2;
-            for(long k = -n; k < n + 1; k++) {
-                for(long l = -n; l < n + 1; l++) {
+            long k, l;
+            for(k = -n; k < n + 1; k++) {
+                for(l = -n; l < n + 1; l++) {
                     if((long)i + k >= 0 && i + k < width &&
                             (long)j + l >= 0 && j + l < height) {
                         double fvalue = 1.0;
@@ -796,8 +801,8 @@ static double weight(struct mim_prng *prng) {
 }
 
 long long compute_factorial_minus_one(long long k) {
-    long long fact = 1;
-    for(long long i = 2; i < k - 1; i++) {
+    long long fact = 1, i;
+    for(i = 2; i < k - 1; i++) {
         fact *= i;
     }
     return fact;
