@@ -790,6 +790,7 @@ static double poisson_cook(struct mim_prng *prng,
         const double lambda);
 double poisson(struct mim_prng *prng,
         const double lambda) {
+    if(isnan(lambda)) return lambda;
     if(fabs(lambda) >= DBL_MAX) return DBL_MAX;
     else if(lambda < 30) return poisson_knuth(prng, lambda);
     else return poisson_cook(prng, lambda);
